@@ -12,7 +12,7 @@
 
 ## Présentation
 
-SCiPNET OS est un faux système d'exploitation inspiré de la [SCP Foundation](https://scp-wiki.net), conçu pour le jeu de rôle. Il tourne sur Linux (Kubuntu/Ubuntu) et propose une interface sombre style terminal avec plusieurs applications intégrées.
+SCiPNET OS est un faux système d'exploitation inspiré de la [SCP Foundation](https://scp-wiki.net), conçu pour le jeu de rôle. Il tourne sur Linux (Kubuntu/Ubuntu) et propose une interface sombre style terminal avec plusieurs applications intégrées. Je ne suis pas très experimenté, j'ai donc utilisé Claude.ia pour m'aider.
 
 ## Applications incluses
 
