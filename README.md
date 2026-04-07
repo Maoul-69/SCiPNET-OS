@@ -31,7 +31,7 @@ SCiPNET OS est un faux système d'exploitation inspiré de la [SCP Foundation](h
 ## Installation
 
 ```bash
-git clone https://github.com/[votre-compte]/scipnet-os.git
+git clone https://github.com/Maoul-69/scipnet-os.git
 cd scipnet-os
 sudo bash install.sh
 ```
@@ -69,18 +69,18 @@ scipnet-os/
 ├── scipnet_common.py       # Bibliothèque commune
 ├── scipnet-setup.py        # Wizard de première configuration
 ├── scipnet-autostart.py    # Autostart de session
-├── scipnet-serveur-msg.py  # Serveur de messagerie
 ├── scp-logo.png            
-└── apps/
-    ├── scipnet-terminal.py
-    ├── scipnet-fichiers.py
-    ├── scipnet-base-scp.py
-    ├── scipnet-personnel.py
-    ├── scipnet-chiffrement.py
-    ├── scipnet-site-map.py
-    ├── scipnet-messagerie.py
-    ├── scipnet-armement.py
-    └── scipnet-parametres.py
+└── SCiPNET-OS.zip/
+    ├── terminal.py
+    ├── fichiers.py
+    ├── Base-SCP.py
+    ├── personnel.py
+    ├── chiffrement.py
+    ├── Site-Map.py
+    ├── messagerie.py
+    ├── armement.py
+    ├── paramètres.py
+    └── + ICONES
 ```
 
 ## Dépendances
