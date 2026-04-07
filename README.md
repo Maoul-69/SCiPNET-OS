@@ -72,7 +72,7 @@ scipnet-os/
 ├── scp-logo.png            
 └── SCiPNET-OS.zip/
     ├── terminal.py
-    ├── fichiers.py
+    ├── dossier.py
     ├── Base-SCP.py
     ├── personnel.py
     ├── chiffrement.py
