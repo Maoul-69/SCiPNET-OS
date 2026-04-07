@@ -1,0 +1,302 @@
+#!/bin/bash
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SCiPNET OS — Script d'installation automatique
+#  SCP Foundation Roleplay Operating System
+#  Licence : Creative Commons Universal (CC0 1.0)
+#  Usage   : sudo bash install.sh
+# ═══════════════════════════════════════════════════════════════════════════════
+
+set -e
+RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[1;33m'; NC='\033[0m'
+
+log()  { echo -e "${CYAN}[SCiPNET]${NC} $1"; }
+ok()   { echo -e "${GREEN}[  OK  ]${NC} $1"; }
+warn() { echo -e "${YELLOW}[ WARN ]${NC} $1"; }
+err()  { echo -e "${RED}[ERROR ]${NC} $1"; exit 1; }
+
+echo ""
+echo -e "${CYAN}╔════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║       SCiPNET OS — Installation       ║${NC}"
+echo -e "${CYAN}║    SCP Foundation Roleplay System      ║${NC}"
+echo -e "${CYAN}╚════════════════════════════════════════╝${NC}"
+echo ""
+
+# ── Vérifications ─────────────────────────────────────────────────────────────
+[ "$EUID" -ne 0 ] && err "Lance ce script avec sudo : sudo bash install.sh"
+command -v python3 &>/dev/null || err "Python3 requis : sudo apt install python3"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_DIR="/opt/scipnet"
+
+# ── Dépendances système ───────────────────────────────────────────────────────
+log "Installation des dépendances..."
+apt-get update -qq
+apt-get install -y -qq \
+    python3 python3-pyqt6 python3-cryptography \
+    python3-pyqt6.qtwebengine \
+    fonts-liberation imagemagick icoutils \
+    xorg openbox unclutter \
+    plymouth plymouth-themes \
+    curl wget 2>/dev/null || warn "Certains paquets optionnels non disponibles"
+ok "Dépendances installées"
+
+# ── Dossiers ──────────────────────────────────────────────────────────────────
+log "Création des dossiers..."
+mkdir -p "$INSTALL_DIR/apps"
+chmod 755 "$INSTALL_DIR"
+ok "Dossiers créés : $INSTALL_DIR"
+
+# ── Fichiers SCiPNET ──────────────────────────────────────────────────────────
+log "Copie des fichiers SCiPNET..."
+
+# Bibliothèque commune (requise par toutes les apps)
+cp "$SCRIPT_DIR/scipnet_common.py"   "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/scipnet-setup.py"    "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/scipnet-autostart.py" "$INSTALL_DIR/"
+
+# Apps utilisateur
+APPS=(
+    "scipnet-terminal.py"
+    "scipnet-fichiers.py"
+    "scipnet-base-scp.py"
+    "scipnet-personnel.py"
+    "scipnet-chiffrement.py"
+    "scipnet-site-map.py"
+    "scipnet-messagerie.py"
+    "scipnet-armement.py"
+    "scipnet-parametres.py"
+)
+for app in "${APPS[@]}"; do
+    src="$SCRIPT_DIR/apps/$app"
+    if [ -f "$src" ]; then
+        cp "$src" "$INSTALL_DIR/apps/"
+        chmod +x "$INSTALL_DIR/apps/$app"
+        ok "Installé : $app"
+    else
+        warn "Non trouvé : $app (ignoré)"
+    fi
+done
+
+# Logo / icône
+if [ -f "$SCRIPT_DIR/scp-logo.png" ]; then
+    cp "$SCRIPT_DIR/scp-logo.png" "$INSTALL_DIR/"
+    # Générer le fond d'écran 1920x1080 avec le logo centré sur fond noir
+    convert -size 1920x1080 xc:black "$INSTALL_DIR/scp-logo.png" \
+        -gravity center -composite "$INSTALL_DIR/wallpaper.png" 2>/dev/null || \
+        cp "$INSTALL_DIR/scp-logo.png" "$INSTALL_DIR/wallpaper.png"
+    ok "Logo et fond d'écran générés"
+elif [ -f "$SCRIPT_DIR/icons8-scp-foundation-32.ico" ]; then
+    icotool -x "$SCRIPT_DIR/icons8-scp-foundation-32.ico" \
+        -o /tmp/ 2>/dev/null || true
+    if ls /tmp/*.png 1>/dev/null 2>&1; then
+        mv /tmp/*.png "$INSTALL_DIR/scp-logo.png"
+        convert -size 1920x1080 xc:black "$INSTALL_DIR/scp-logo.png" \
+            -gravity center -composite "$INSTALL_DIR/wallpaper.png" 2>/dev/null || \
+            cp "$INSTALL_DIR/scp-logo.png" "$INSTALL_DIR/wallpaper.png"
+        ok "Logo converti depuis .ico"
+    fi
+else
+    warn "Aucun logo trouvé — les apps utiliseront l'icône par défaut"
+fi
+
+chown -R root:root "$INSTALL_DIR"
+chmod -R 755 "$INSTALL_DIR"
+
+# ── Utilisateur Linux 'scipnet' ───────────────────────────────────────────────
+log "Configuration de l'utilisateur Linux 'scipnet'..."
+if ! id "scipnet" &>/dev/null; then
+    useradd -m -s /bin/bash -G video,audio,input scipnet
+    echo "scipnet:scipnet" | chpasswd
+    ok "Utilisateur 'scipnet' créé (mot de passe Linux : scipnet)"
+else
+    ok "Utilisateur 'scipnet' déjà existant"
+fi
+
+# ── Politique pkexec pour Plymouth ───────────────────────────────────────────
+log "Configuration de la politique pkexec pour Plymouth..."
+mkdir -p /usr/share/polkit-1/actions
+cat > /usr/share/polkit-1/actions/org.scipnet.plymouth.policy << 'POLEOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <action id="org.scipnet.plymouth.apply">
+    <description>Appliquer le thème Plymouth SCiPNET</description>
+    <message>Le mot de passe administrateur est requis pour modifier le thème de démarrage.</message>
+    <icon_name>preferences-system</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+</policyconfig>
+POLEOF
+ok "Politique pkexec configurée (dialogue graphique au changement de boot)"
+
+# ── Autostart KDE ────────────────────────────────────────────────────────────
+log "Configuration de l'autostart KDE..."
+mkdir -p /home/scipnet/.config/autostart
+cat > /home/scipnet/.config/autostart/scipnet-setup.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=SCiPNET Setup
+Exec=python3 /opt/scipnet/scipnet-setup.py
+Hidden=false
+X-KDE-autostart-enabled=true
+EOF
+chown -R scipnet:scipnet /home/scipnet/.config/
+ok "Autostart KDE configuré"
+
+# ── Raccourcis bureau ─────────────────────────────────────────────────────────
+log "Création des raccourcis bureau..."
+mkdir -p /home/scipnet/Desktop
+
+declare -A APP_NAMES=(
+    ["terminal"]="Terminal SCiPNET"
+    ["fichiers"]="Fichiers"
+    ["base-scp"]="Base de Données SCP"
+    ["personnel"]="Personnel"
+    ["chiffrement"]="Chiffrement"
+    ["site-map"]="Site Map"
+    ["messagerie"]="Messagerie"
+    ["armement"]="Armement"
+    ["parametres"]="Paramètres"
+)
+declare -A APP_ICONS=(
+    ["terminal"]="scp-logo"
+    ["fichiers"]="folder"
+    ["base-scp"]="scp-logo"
+    ["personnel"]="system-users"
+    ["chiffrement"]="lock"
+    ["site-map"]="applications-graphics"
+    ["messagerie"]="mail-message"
+    ["armement"]="scp-logo"
+    ["parametres"]="preferences-system"
+)
+
+ICON_PATH="$INSTALL_DIR/scp-logo.png"
+
+for key in "${!APP_NAMES[@]}"; do
+    # Utiliser l'icône spécifique si elle existe, sinon le logo SCP
+    CUSTOM_ICON="$SCRIPT_DIR/icons/scipnet-${key}-logo.png"
+    ICON="${CUSTOM_ICON:-$ICON_PATH}"
+    [ -f "$CUSTOM_ICON" ] || ICON="$ICON_PATH"
+
+    cat > "/home/scipnet/Desktop/scipnet-${key}.desktop" << EOF
+[Desktop Entry]
+Type=Application
+Name=${APP_NAMES[$key]}
+Exec=python3 /opt/scipnet/apps/scipnet-${key}.py
+Icon=$ICON
+Terminal=false
+Categories=SCiPNET;
+EOF
+    chmod +x "/home/scipnet/Desktop/scipnet-${key}.desktop"
+done
+
+chown -R scipnet:scipnet /home/scipnet/Desktop/
+ok "Raccourcis bureau créés"
+
+# ── Fond d'écran KDE ─────────────────────────────────────────────────────────
+log "Configuration du fond d'écran KDE..."
+if [ -f "$INSTALL_DIR/wallpaper.png" ]; then
+    mkdir -p /home/scipnet/.config
+    # Plasma wallpaper via plasma-apply-wallpaperimage au premier login
+    cat > /home/scipnet/.config/autostart/scipnet-wallpaper.desktop << EOF
+[Desktop Entry]
+Type=Application
+Name=SCiPNET Wallpaper
+Exec=plasma-apply-wallpaperimage $INSTALL_DIR/wallpaper.png
+Hidden=false
+X-KDE-autostart-enabled=true
+EOF
+    chown scipnet:scipnet /home/scipnet/.config/autostart/scipnet-wallpaper.desktop
+    ok "Fond d'écran configuré"
+fi
+
+# ── Thème Plymouth ────────────────────────────────────────────────────────────
+log "Installation du thème Plymouth..."
+mkdir -p /usr/share/plymouth/themes/scipnet
+
+cat > /usr/share/plymouth/themes/scipnet/scipnet.script << 'PLYM'
+Window.SetBackgroundTopColor(0.03, 0.03, 0.03);
+Window.SetBackgroundBottomColor(0.0, 0.0, 0.0);
+logo = Image("scipnet-logo.png");
+if (logo) {
+    s = Sprite(logo);
+    s.SetX(Window.GetWidth() / 2 - logo.GetWidth() / 2);
+    s.SetY(Window.GetHeight() / 2 - logo.GetHeight() / 2 - 70);
+}
+t = Image.Text("S C i P N E T", 0.0, 0.83, 1.0, 1);
+ts = Sprite(t);
+ts.SetX(Window.GetWidth() / 2 - t.GetWidth() / 2);
+ts.SetY(Window.GetHeight() / 2 + 50);
+s2 = Image.Text("Secure. Contain. Protect.", 0.35, 0.35, 0.35, 1);
+ss2 = Sprite(s2);
+ss2.SetX(Window.GetWidth() / 2 - s2.GetWidth() / 2);
+ss2.SetY(Window.GetHeight() / 2 + 80);
+msg_sprite = Sprite();
+msg_sprite.SetPosition(Window.GetWidth() / 2 - 200, Window.GetHeight() - 60, 0);
+fun message_callback(text) {
+    m = Image.Text(text, 0.0, 0.83, 1.0, 1);
+    msg_sprite.SetImage(m);
+    msg_sprite.SetX(Window.GetWidth() / 2 - m.GetWidth() / 2);
+}
+Plymouth.SetMessageFunction(message_callback);
+PLYM
+
+cat > /usr/share/plymouth/themes/scipnet/scipnet.plymouth << 'PLYM'
+[Plymouth Theme]
+Name=SCiPNET
+Description=SCP Foundation SCiPNET OS
+ModuleName=script
+[script]
+ImageDir=/usr/share/plymouth/themes/scipnet
+ScriptFile=/usr/share/plymouth/themes/scipnet/scipnet.script
+PLYM
+
+if [ -f "$INSTALL_DIR/scp-logo.png" ]; then
+    cp "$INSTALL_DIR/scp-logo.png" \
+       /usr/share/plymouth/themes/scipnet/scipnet-logo.png
+fi
+
+update-alternatives --install /usr/share/plymouth/themes/default.plymouth \
+    default.plymouth \
+    /usr/share/plymouth/themes/scipnet/scipnet.plymouth 100 2>/dev/null || true
+update-alternatives --set default.plymouth \
+    /usr/share/plymouth/themes/scipnet/scipnet.plymouth 2>/dev/null || true
+update-initramfs -u 2>/dev/null || warn "update-initramfs ignoré"
+ok "Thème Plymouth installé"
+
+# ── GRUB silencieux ───────────────────────────────────────────────────────────
+log "Configuration GRUB (boot silencieux)..."
+if [ -f /etc/default/grub ]; then
+    sed -i 's/GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' /etc/default/grub
+    grep -q "GRUB_TIMEOUT_STYLE" /etc/default/grub || \
+        echo 'GRUB_TIMEOUT_STYLE=hidden' >> /etc/default/grub
+    sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' \
+        /etc/default/grub
+    update-grub 2>/dev/null || true
+    ok "GRUB configuré"
+fi
+
+# ── Résumé ────────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${CYAN}═══════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}      SCiPNET OS installé avec succès !${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════${NC}"
+echo ""
+echo -e "  ${WHITE}Apps         :${NC} $INSTALL_DIR/apps/"
+echo -e "  ${WHITE}Compte Linux :${NC} scipnet / scipnet"
+echo ""
+echo -e "  ${YELLOW}Au premier démarrage de la session 'scipnet',${NC}"
+echo -e "  ${YELLOW}un wizard de configuration s'ouvrira.${NC}"
+echo ""
+echo -e "  ${CYAN}Messagerie — lancez le serveur sur UN seul PC :${NC}"
+echo -e "  ${WHITE}python3 $INSTALL_DIR/scipnet-serveur-msg.py${NC}"
+echo ""
+echo -e "  ${CYAN}Boot personnalisable depuis :${NC}"
+echo -e "  ${WHITE}Apps → Paramètres → onglet Boot${NC}"
+echo ""
